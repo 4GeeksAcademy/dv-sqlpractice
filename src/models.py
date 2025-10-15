@@ -7,134 +7,189 @@ from sqlalchemy.orm import Mapped, mapped_column
 db = SQLAlchemy()
 
 
-db = SQLAlchemy()
-
-# Tabla de asociación para la relación muchos a muchos
-video_game_platform = Table(
-    'video_game_platform',
-    db.metadata,
-    db.Column('video_game_id', db.Integer, ForeignKey(
-        'video_game.id', ondelete='CASCADE'), primary_key=True),
-    db.Column('platform_id', db.Integer, ForeignKey(
-        'platform.id', ondelete='CASCADE'), primary_key=True)
-)
-
-
 class Country(db.Model):
+    __tablename__ = 'countries'
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    continent: Mapped[str] = mapped_column(String(50))
-    population: Mapped[int] = mapped_column(db.BigInteger, nullable=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    continent: Mapped[str] = mapped_column(
+        String(80), nullable=False, default='Unknown')
+    population: Mapped[int] = mapped_column(nullable=False, default=0)
 
-    manufacturers = relationship(
-        'Manufacturer', back_populates='country', lazy=True)
-    development_companies = relationship(
-        'DevelopmentCompany', back_populates='country', lazy=True)
+    manufacturers = relationship("Manufacturer", back_populates="country")
+
+    def __repr__(self):
+        return f'<Country {self.name}>'
 
     def serialize(self):
         return {
             "id": self.id,
             "name": self.name,
             "continent": self.continent,
-            "population": self.population,
+            "population": self.population
         }
-
-    validate_population = db.validates('population')
-
-    def validate_population(self, key, value):
-        if value is not None and value < 0:
-            raise ValueError("Population must be a non-negative integer")
-        return value
 
 
 class Manufacturer(db.Model):
+    __tablename__ = 'manufacturers'
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    country_id: Mapped[int] = mapped_column(
-        db.ForeignKey('country.id', ondelete='SET NULL'), nullable=True)
     founded_year: Mapped[int] = mapped_column(nullable=True)
+    country_id: Mapped[int] = mapped_column(ForeignKey('countries.id'))
 
-    country = relationship('Country', back_populates='manufacturers')
-    platforms = relationship(
-        'Platform', back_populates='manufacturer', lazy=True)
+    country = relationship("Country", back_populates="manufacturers")
+
+    def __repr__(self):
+        return f'<Manufacturer {self.name}>'
 
     def serialize(self):
         return {
             "id": self.id,
             "name": self.name,
             "country_id": self.country_id,
-            "founded_year": self.founded_year,
+            "country": self.country.serialize() if self.country else None
         }
 
 
-class Platform(db.Model):
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
-    manufacturer_id: Mapped[int] = mapped_column(
-        db.ForeignKey('manufacturer.id', ondelete='SET NULL'), nullable=True)
-    hardware_price: Mapped[float] = mapped_column(
-        db.Numeric(10, 2), nullable=True)
+# Association table for many-to-many relationship between Car and Feature
 
-    manufacturer = relationship('Manufacturer', back_populates='platforms')
-    video_games = relationship(
-        'VideoGame',
-        secondary=video_game_platform,
-        back_populates='platforms',
-        lazy='dynamic'
-    )
-
-    def serialize(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "manufacturer_id": self.manufacturer_id,
-            "hardware_price": float(self.hardware_price) if self.hardware_price is not None else None,
-        }
-
-
-class DevelopmentCompany(db.Model):
+class Paren(db.Model):
+    __tablename__ = 'parents'
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    country_id: Mapped[int] = mapped_column(
-        db.ForeignKey('country.id', ondelete='SET NULL'), nullable=True)
-    founded_year: Mapped[int] = mapped_column(nullable=True)
 
-    country = relationship('Country', back_populates='development_companies')
-    video_games = relationship(
-        'VideoGame', back_populates='company', lazy=True)
+    children = relationship("Child", back_populates="parent", uselist=True)
+
+    def __repr__(self):
+        return f'<Parent {self.name}>'
 
     def serialize(self):
         return {
             "id": self.id,
-            "name": self.name,
-            "country_id": self.country_id,
-            "founded_year": self.founded_year,
+            "name": self.name
         }
 
 
-class VideoGame(db.Model):
+class Child(db.Model):
+    __tablename__ = 'children'
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
-    genre: Mapped[str] = mapped_column(String(50), nullable=True)
-    release_year: Mapped[int] = mapped_column(nullable=True)
-    rating: Mapped[str] = mapped_column(String(10), nullable=True)
-    company_id: Mapped[int] = mapped_column(
-        db.ForeignKey('development_company.id', ondelete='SET NULL'), nullable=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    parent_id: Mapped[int] = mapped_column(ForeignKey('parents.id'))
 
-    company = relationship('DevelopmentCompany', back_populates='video_games')
-    platforms = relationship(
-        'Platform',
-        secondary=video_game_platform,
-        back_populates='video_games',
-        lazy='dynamic'
-    )
+    parent = relationship("Paren", back_populates="children")
+
+    def __repr__(self):
+        return f'<Child {self.name}>'
 
     def serialize(self):
         return {
             "id": self.id,
             "name": self.name,
-            "genre": self.genre,
-            "release_year": self.release_year,
-            "rating": self.rating,
-            "company_id": self.company_id,
+            "parent_id": self.parent_id,
+            "parent": self.parent.serialize() if self.parent else None
+        }
+
+
+# Association table for many-to-many relationship between Car and Feature
+
+customer_product = Table(
+    'customer_product',
+    db.Model.metadata,
+    mapped_column('customer_id', ForeignKey('customers.id'), primary_key=True),
+    mapped_column('product_id', ForeignKey('products.id'), primary_key=True)
+)
+
+
+class Customer(db.Model):
+    __tablename__ = 'customers'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(
+        String(120), unique=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    products = relationship(
+        "Product",
+        secondary=customer_product,
+        back_populates="customers"
+    )
+
+    def __repr__(self):
+        return f'<Customer {self.name}>'
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "is_active": self.is_active
+        }
+
+
+class Product(db.Model):
+    __tablename__ = 'products'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    price: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    customers = relationship(
+        "Customer",
+        secondary=customer_product,
+        back_populates="products"
+    )
+
+    def __repr__(self):
+        return f'<Product {self.name}>'
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "price": self.price,
+            "in_stock": self.in_stock
+        }
+
+
+# Association table for one-to-many relationship between Author and Book
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(
+        String(80), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(
+        String(120), unique=True, nullable=False)
+
+    posts = relationship("Post", back_populates="author")
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email
+        }
+
+
+class Post(db.Model):
+    __tablename__ = 'posts'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+
+    author = relationship("User", back_populates="posts")
+
+    def __repr__(self):
+        return f'<Post {self.title}>'
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "content": self.content,
+            "user_id": self.user_id,
+            "author": self.author.serialize() if self.author else None
         }

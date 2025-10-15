@@ -8,7 +8,7 @@ from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
-from models import db
+from models import db, Country
 # from models import Person
 
 app = Flask(__name__)
@@ -50,6 +50,45 @@ def handle_hello():
     }
 
     return jsonify(response_body), 200
+
+
+@app.route('/countries', methods=['GET'])
+def get_countries():
+    # countries = Country.query.all()
+    # countries_list = list(map(lambda x: x.serialize(), countries))
+    # return jsonify(countries_list), 200
+
+    countries = db.session.execute(db.select(Country)).scalars()
+    if countries:
+        countries_list = [country.serialize() for country in countries]
+        return jsonify(countries_list), 200
+    else:
+        return jsonify([], 200)
+
+
+@app.route('/countries', methods=['POST'])
+def create_country():
+    body = request.get_json()
+    if body is None:
+        return jsonify({"msg": "You need to specify the request body as a json object"}), 400
+    if 'name' not in body:
+        return jsonify({"msg": "You need to specify the country name"}), 400
+    if 'continent' not in body:
+        return jsonify({"msg": "You need to specify the country continent"}), 400
+    if 'population' not in body:
+        return jsonify({"msg": "You need to specify the country population"}), 400
+
+    country = Country(
+        name=body['name'], continent=body['continent'], population=body['population'])
+    try:
+        print("Llegue a antes del add")
+        db.session.add(country)
+        db.session.commit()
+        return jsonify(country.serialize()), 201
+    except Exception as e:
+        print(e)
+        db.session.rollback()
+        return jsonify({"msg": "Something went wrong"}), 500
 
 
 # this only runs if `$ python src/app.py` is executed
